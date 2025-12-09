@@ -683,11 +683,11 @@
                             <div class="status-badge status-{{ game.status|lower }}">
                                 {{ game.status }}
                             </div>
-                            <div>
+                            <div class="game-time" data-utc-time="{{ game.start_time_utc }}">
                                 {% if game.period_info %}
                                     {{ game.period_info }}
                                 {% elif game.start_time %}
-                                    {{ game.start_time }}
+                                    <span class="local-time">{{ game.start_time }} EST</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -791,12 +791,42 @@
         let currentDate = document.getElementById('game-date').getAttribute('data-current-date');
         let isSkeletonData = {{ games_data.skeleton|yesno:"true,false" }};
 
+        // Convert all times to user's local timezone on page load
+        convertTimesToLocalTimezone();
+
         // If we loaded skeleton data, automatically fetch full data in background
         if (isSkeletonData) {
             console.log('[PROGRESSIVE LOAD] Skeleton data loaded, fetching full details...');
             setTimeout(() => {
                 loadFullDetailsInBackground();
             }, 100);
+        }
+
+        function convertTimesToLocalTimezone() {
+            const gameTimeElements = document.querySelectorAll('.game-time');
+            
+            gameTimeElements.forEach(element => {
+                const utcTime = element.getAttribute('data-utc-time');
+                const localTimeSpan = element.querySelector('.local-time');
+                
+                if (utcTime && localTimeSpan) {
+                    try {
+                        const date = new Date(utcTime);
+                        const timeStr = date.toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit',
+                            hour12: true 
+                        });
+                        const tzAbbr = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
+                            .formatToParts(date)
+                            .find(part => part.type === 'timeZoneName')?.value || '';
+                        
+                        localTimeSpan.textContent = `${timeStr} ${tzAbbr}`;
+                    } catch (error) {
+                        console.error('Error converting time:', error);
+                    }
+                }
+            });
         }
 
         async function loadFullDetailsInBackground() {
@@ -1103,8 +1133,8 @@
                             <div class="status-badge status-${game.status.toLowerCase()}">
                                 ${game.status}
                             </div>
-                            <div>
-                                ${game.period_info || game.start_time || ''}
+                            <div class="game-time" data-utc-time="${game.start_time_utc || ''}">
+                                ${game.period_info || (game.start_time ? '<span class="local-time">' + game.start_time + ' EST</span>' : '')}
                             </div>
                         </div>
                         <div class="game-body">
@@ -1151,6 +1181,9 @@
                     <div class="games-grid">${gamesHTML}</div>
                 `;
             }
+            
+            // Convert times to user's local timezone
+            convertTimesToLocalTimezone();
             
             // Also render leaderboard if available
             if (data.leaders) {

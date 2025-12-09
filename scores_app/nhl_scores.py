@@ -2307,6 +2307,7 @@ def get_games_data_skeleton(date_str=None):
         
         # Get start time for scheduled games
         start_time = ''
+        start_time_utc = ''
         if game_status == 'Scheduled':
             start_time_utc = game.get('startTimeUTC', '')
             if start_time_utc:
@@ -2322,6 +2323,7 @@ def get_games_data_skeleton(date_str=None):
             'id': game_id,
             'status': game_status,
             'start_time': start_time,
+            'start_time_utc': start_time_utc,
             'period_info': '',
             'away_team': {
                 'abbrev': away_abbrev,
@@ -2478,6 +2480,7 @@ def get_games_data(date_str=None):
         
         # Get start time for scheduled games
         start_time = ''
+        start_time_utc = ''
         if game_status == 'Scheduled':
             start_time_utc = game.get('startTimeUTC', '')
             if start_time_utc:
@@ -2578,6 +2581,7 @@ def get_games_data(date_str=None):
             'status': game_status,
             'period_info': period_info,
             'start_time': start_time,
+            'start_time_utc': start_time_utc,
             'scoring_summary': scoring_summary
         })
     
