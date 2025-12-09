@@ -41,13 +41,13 @@ def nhl_scores_view(request):
             sys.stderr.write(f"[VIEW] Returning JSON response with {len(data.get('games', []))} games\n")
         return JsonResponse(data)
     
-    # For regular page loads, return SKELETON data FAST (no slow API calls)
-    sys.stderr.write(f"[VIEW] Handling regular page load, calling get_games_data_skeleton() for FAST response...\n")
+    # For regular page loads, return FULL data (fast due to persistent caching)
+    sys.stderr.write(f"[VIEW] Handling regular page load, calling get_games_data() (cached data loads instantly)...\n")
     data_start = time.time()
-    games_data = get_games_data_skeleton(date_str)
+    games_data = get_games_data(date_str)
     data_time = (time.time() - data_start) * 1000
-    sys.stderr.write(f"[VIEW] get_games_data_skeleton() completed in {data_time:.0f}ms\n")
-    sys.stderr.write(f"[VIEW] Retrieved {len(games_data.get('games', []))} games (skeleton mode)\n")
+    sys.stderr.write(f"[VIEW] get_games_data() completed in {data_time:.0f}ms\n")
+    sys.stderr.write(f"[VIEW] Retrieved {len(games_data.get('games', []))} games (full data)\n")
     
     context = {
         'games_data': games_data,

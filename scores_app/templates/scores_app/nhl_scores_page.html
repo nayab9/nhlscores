@@ -438,58 +438,31 @@
             font-size: 0.85em;
         }
 
-        .game-tabs {
-            display: flex;
-            gap: 0;
-            border-bottom: 2px solid #e2e8f0;
-            margin-bottom: 15px;
-        }
 
-        .game-tab {
-            flex: 1;
-            padding: 10px 15px;
-            background: #f7fafc;
-            border: none;
-            cursor: pointer;
-            font-size: 0.9em;
-            font-weight: 600;
-            color: #718096;
-            transition: all 0.2s;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-        }
-
-        .game-tab:hover {
-            background: #edf2f7;
-            color: #4a5568;
-        }
-
-        .game-tab.active {
-            background: white;
-            color: #2d3748;
-            border-bottom: 2px solid #3182ce;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
 
         .stream-container {
-            width: 100%;
-            height: 400px;
+            padding: 20px;
+            background: #f7fafc;
             border-radius: 8px;
-            overflow: hidden;
-            background: #000;
         }
 
-        .stream-container iframe {
-            width: 100%;
-            height: 100%;
-            border: 0;
+        .stream-url {
+            margin-top: 10px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            word-break: break-all;
+        }
+
+        .stream-url a {
+            color: #3182ce;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .stream-url a:hover {
+            text-decoration: underline;
         }
         
         .where-to-watch {
@@ -498,11 +471,15 @@
             border-top: 1px solid #e2e8f0;
         }
         
-        .watch-title {
-            font-size: 0.9em;
-            font-weight: 600;
-            color: #4a5568;
+        .watch-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             margin-bottom: 8px;
+        }
+        
+        .watch-title {
+            font-size: 1.1em;
         }
         
         .watch-channels {
@@ -858,66 +835,58 @@
                                 </div>
                             </div>
 
-                            <!-- Game Tabs -->
-                            <div class="game-tabs">
-                                <button class="game-tab active" onclick="switchTab(event, '{{ game.id }}', 'details')">📊 Game Details</button>
-                                <button class="game-tab" onclick="switchTab(event, '{{ game.id }}', 'stream')">📺 Watch Live</button>
-                            </div>
-
-                            <!-- Details Tab Content -->
-                            <div class="tab-content active" id="tab-details-{{ game.id }}">
-                                {% if game.scoring_summary %}
-                                <div class="scoring-details" style="display: none;">
-                                    <div class="scoring-summary">
-                                    {% for period_group in game.scoring_summary %}
-                                    <div class="scoring-period">
-                                        <div class="period-header">{{ period_group.period }}</div>
-                                        {% for goal in period_group.goals %}
-                                        <div class="goal">
-                                            <div class="goal-time">{{ goal.time }}</div>
-                                            <div class="goal-team">{{ goal.team }}</div>
-                                            <div class="goal-details">
-                                                <div class="scorer">
-                                                    {{ goal.scorer.display }}
-                                                    {% if goal.scorer.is_goals_leader %}<span class="team-leader-indicator" title="Team Leader in Goals">G</span>{% endif %}
-                                                    {% if goal.scorer.is_assists_leader %}<span class="team-leader-indicator" title="Team Leader in Assists">A</span>{% endif %}
-                                                    {% if goal.scorer.is_points_leader %}<span class="team-leader-indicator" title="Team Leader in Points">P</span>{% endif %}
-                                                </div>
-                                                {% if goal.assists %}
-                                                <div class="assists">
-                                                    Assists: 
-                                                    {% for assist in goal.assists %}
-                                                        {{ assist.display }}{% if assist.is_goals_leader %}<span class="team-leader-indicator" title="Team Leader in Goals">G</span>{% endif %}{% if assist.is_assists_leader %}<span class="team-leader-indicator" title="Team Leader in Assists">A</span>{% endif %}{% if assist.is_points_leader %}<span class="team-leader-indicator" title="Team Leader in Points">P</span>{% endif %}{% if not forloop.last %}, {% endif %}
-                                                    {% endfor %}
-                                                </div>
-                                                {% endif %}
+                            <!-- Game Details -->
+                            {% if game.scoring_summary %}
+                            <div class="scoring-details" style="display: block;">
+                                <div class="scoring-summary">
+                                {% for period_group in game.scoring_summary %}
+                                <div class="scoring-period">
+                                    <div class="period-header">{{ period_group.period }}</div>
+                                    {% for goal in period_group.goals %}
+                                    <div class="goal">
+                                        <div class="goal-time">{{ goal.time }}</div>
+                                        <div class="goal-team">{{ goal.team }}</div>
+                                        <div class="goal-details">
+                                            <div class="scorer">
+                                                {{ goal.scorer.display }}
+                                                {% if goal.scorer.is_goals_leader %}<span class="team-leader-indicator" title="Team Leader in Goals">G</span>{% endif %}
+                                                {% if goal.scorer.is_assists_leader %}<span class="team-leader-indicator" title="Team Leader in Assists">A</span>{% endif %}
+                                                {% if goal.scorer.is_points_leader %}<span class="team-leader-indicator" title="Team Leader in Points">P</span>{% endif %}
                                             </div>
+                                            {% if goal.assists %}
+                                            <div class="assists">
+                                                Assists: 
+                                                {% for assist in goal.assists %}
+                                                    {{ assist.display }}{% if assist.is_goals_leader %}<span class="team-leader-indicator" title="Team Leader in Goals">G</span>{% endif %}{% if assist.is_assists_leader %}<span class="team-leader-indicator" title="Team Leader in Assists">A</span>{% endif %}{% if assist.is_points_leader %}<span class="team-leader-indicator" title="Team Leader in Points">P</span>{% endif %}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
                                         </div>
-                                        {% endfor %}
                                     </div>
                                     {% endfor %}
                                 </div>
-                                
-                                {% if game.where_to_watch %}
-                                <div class="where-to-watch">
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="where-to-watch">
+                                <div class="watch-header">
                                     <div class="watch-title">📺</div>
                                     <div class="watch-channels">
-                                        {% for channel in game.where_to_watch %}
-                                            <span class="channel">{{ channel }}</span>
-                                        {% endfor %}
+                                        {% if game.where_to_watch %}
+                                            {% for channel in game.where_to_watch %}
+                                                <span class="channel">{{ channel }}</span>
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="channel">Stream available</span>
+                                        {% endif %}
                                     </div>
                                 </div>
-                                {% endif %}
-                                </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Stream Tab Content -->
-                            <div class="tab-content" id="tab-stream-{{ game.id }}">
-                                <div class="stream-container">
-                                    <iframe src="https://daddyhd.com/stream/stream-663.php" allowfullscreen></iframe>
+                                <div class="stream-url">
+                                    <a href="https://daddyhd.com/stream/stream-663.php" target="_blank">https://daddyhd.com/stream/stream-663.php</a>
                                 </div>
                             </div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
@@ -939,33 +908,11 @@
     </div>
 
     <script>
-        let detailsVisible = false;
+        let detailsVisible = true;  // Show scoring details by default
         let currentDate = '{{ games_data.date }}';
         let isSkeletonData = {{ games_data.skeleton|yesno:"true,false" }};
         let displayDates = [];  // Array to track displayed dates
         let centerIndex = 3;     // Center date is at index 3 (middle of 7 dates)
-
-        // Tab switching function
-        function switchTab(event, gameId, tabName) {
-            // Get all tabs and content for this game
-            const gameCard = event.target.closest('.game-card');
-            const tabs = gameCard.querySelectorAll('.game-tab');
-            const contents = gameCard.querySelectorAll('.tab-content');
-            
-            // Remove active class from all tabs and contents
-            tabs.forEach(tab => tab.classList.remove('active'));
-            contents.forEach(content => content.classList.remove('active'));
-            
-            // Add active class to clicked tab
-            event.target.classList.add('active');
-            
-            // Show corresponding content
-            const contentId = 'tab-' + tabName + '-' + gameId;
-            const activeContent = document.getElementById(contentId);
-            if (activeContent) {
-                activeContent.classList.add('active');
-            }
-        }
 
         // Helper function to parse date string safely (YYYY-MM-DD)
         function parseDate(dateStr) {
@@ -1101,32 +1048,6 @@
             });
         }
 
-        async function loadFullDetailsInBackground() {
-            console.log('[PROGRESSIVE LOAD] Fetching full game details...');
-            const startTime = performance.now();
-            
-            try {
-                const response = await fetch(`?format=json&date=${currentDate}`, {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-                
-                if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
-                
-                const data = await response.json();
-                const loadTime = Math.round(performance.now() - startTime);
-                console.log(`[PROGRESSIVE LOAD] Full details loaded in ${loadTime}ms`);
-                
-                if (data.success && data.games && data.games.length > 0) {
-                    renderGames(data);
-                    updateTimestamp();
-                }
-            } catch (error) {
-                console.error('[PROGRESSIVE LOAD] Error loading full details:', error);
-            }
-        }
-
         function updateTimestamp() {
             const now = new Date();
             const timeString = now.toLocaleTimeString();
@@ -1163,63 +1084,40 @@
             container.style.opacity = '0.5';
             
             try {
-                // FIRST: Load skeleton data FAST (just like initial page load)
-                console.log('[PROGRESSIVE LOAD] Fetching skeleton data for date:', dateStr);
-                const skeletonStart = performance.now();
+                // Load FULL data instantly from cache (no more progressive loading needed!)
+                console.log('[CACHE LOAD] Fetching full cached data for date:', dateStr);
+                const loadStart = performance.now();
                 
-                const skeletonResponse = await fetch(`?format=json&date=${dateStr}&skeleton=true`, {
+                const response = await fetch(`?format=json&date=${dateStr}`, {
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'
                     }
                 });
                 
-                if (!skeletonResponse.ok) {
-                    const errorText = await skeletonResponse.text();
+                if (!response.ok) {
+                    const errorText = await response.text();
                     console.error('Server error:', errorText);
-                    throw new Error(`Failed to fetch data: ${skeletonResponse.status}`);
+                    throw new Error(`Failed to fetch data: ${response.status}`);
                 }
                 
-                const skeletonData = await skeletonResponse.json();
-                const skeletonTime = performance.now() - skeletonStart;
-                console.log(`[PROGRESSIVE LOAD] Skeleton data loaded in ${skeletonTime.toFixed(0)}ms`);
+                const data = await response.json();
+                const loadTime = performance.now() - loadStart;
+                console.log(`[CACHE LOAD] Full data loaded in ${loadTime.toFixed(0)}ms`);
                 
-                currentDate = skeletonData.date;
+                currentDate = data.date;
                 renderDateCarousel();  // Update carousel with active state
                 
-                if (skeletonData.success && skeletonData.games && skeletonData.games.length > 0) {
-                    renderGames(skeletonData);
+                if (data.success && data.games && data.games.length > 0) {
+                    renderGames(data);
                 } else {
-                    renderNoGames(skeletonData.message || 'No games found for this date');
+                    renderNoGames(data.message || 'No games found for this date');
                 }
                 
                 updateTimestamp();
                 
-                // Hide loading indicator after skeleton loads
+                // Hide loading indicator
                 loading.classList.remove('active');
                 container.style.opacity = '1';
-                
-                // SECOND: Load full details in background (if we have games)
-                if (skeletonData.success && skeletonData.games && skeletonData.games.length > 0) {
-                    console.log('[PROGRESSIVE LOAD] Fetching full details in background...');
-                    const fullStart = performance.now();
-                    
-                    const fullResponse = await fetch(`?format=json&date=${dateStr}`, {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-                    
-                    if (fullResponse.ok) {
-                        const fullData = await fullResponse.json();
-                        const fullTime = performance.now() - fullStart;
-                        console.log(`[PROGRESSIVE LOAD] Full details loaded in ${fullTime.toFixed(0)}ms`);
-                        
-                        if (fullData.success && fullData.games && fullData.games.length > 0) {
-                            renderGames(fullData);
-                            updateTimestamp();
-                        }
-                    }
-                }
                 
             } catch (error) {
                 console.error('Error loading games:', error);
@@ -1381,15 +1279,21 @@
                     scoringHTML += '</div>';  // Close scoring-summary
                     
                     // Add where to watch section inside scoring-details
+                    scoringHTML += '<div class="where-to-watch">';
+                    scoringHTML += '<div class="watch-header">';
+                    scoringHTML += '<div class="watch-title">📺</div>';
+                    scoringHTML += '<div class="watch-channels">';
                     if (game.where_to_watch && game.where_to_watch.length > 0) {
-                        scoringHTML += '<div class="where-to-watch">';
-                        scoringHTML += '<div class="watch-title">📺</div>';
-                        scoringHTML += '<div class="watch-channels">';
                         game.where_to_watch.forEach(channel => {
                             scoringHTML += '<span class="channel">' + channel + '</span>';
                         });
-                        scoringHTML += '</div></div>';
+                    } else {
+                        scoringHTML += '<span class="channel">Stream available</span>';
                     }
+                    scoringHTML += '</div></div>';  // Close watch-header
+                    scoringHTML += '<div class="stream-url">';
+                    scoringHTML += '<a href="https://daddyhd.com/stream/stream-663.php" target="_blank">https://daddyhd.com/stream/stream-663.php</a>';
+                    scoringHTML += '</div></div>';  // Close stream-url and where-to-watch
                     
                     scoringHTML += '</div>';  // Close scoring-details
                 }
@@ -1433,23 +1337,8 @@
                                 </div>
                             </div>
                             
-                            <!-- Game Tabs -->
-                            <div class="game-tabs">
-                                <button class="game-tab active" onclick="switchTab(event, '${game.id}', 'details')">📊 Game Details</button>
-                                <button class="game-tab" onclick="switchTab(event, '${game.id}', 'stream')">📺 Watch Live</button>
-                            </div>
-                            
-                            <!-- Details Tab Content -->
-                            <div class="tab-content active" id="tab-details-${game.id}">
-                                ${scoringHTML}
-                            </div>
-                            
-                            <!-- Stream Tab Content -->
-                            <div class="tab-content" id="tab-stream-${game.id}">
-                                <div class="stream-container">
-                                    <iframe src="https://daddyhd.com/stream/stream-663.php" allowfullscreen></iframe>
-                                </div>
-                            </div>
+                            <!-- Game Details -->
+                            ${scoringHTML}
                         </div>
                     </div>
                 `;

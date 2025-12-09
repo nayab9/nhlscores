@@ -18,15 +18,159 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 import time
+import pickle
+from pathlib import Path
+import threading
 
 # When True, force ANSI color codes even if stdout.isatty() is False
 FORCE_COLOR = False
 
-# Simple cache
+# Persistent cache directory
+CACHE_DIR = Path(__file__).parent / 'cache_data'
+CACHE_DIR.mkdir(exist_ok=True)
+
+# Simple in-memory cache
 game_cache = {}
 standings_cache = {'data': None, 'timestamp': None}
 leaders_cache = {'data': None, 'timestamp': None}
+schedule_cache = {}  # {date_str: {'games': [...], 'timestamp': datetime}}
 CACHE_DURATION = 300  # 5 minutes in seconds
+
+# Persistent cache file paths
+GAME_CACHE_FILE = CACHE_DIR / 'game_cache.pkl'
+STANDINGS_CACHE_FILE = CACHE_DIR / 'standings_cache.pkl'
+LEADERS_CACHE_FILE = CACHE_DIR / 'leaders_cache.pkl'
+SCHEDULE_CACHE_FILE = CACHE_DIR / 'schedule_cache.pkl'
+
+def load_persistent_cache():
+    """Load cached data from disk on startup."""
+    global game_cache, standings_cache, leaders_cache, schedule_cache
+    
+    try:
+        if GAME_CACHE_FILE.exists():
+            with open(GAME_CACHE_FILE, 'rb') as f:
+                game_cache = pickle.load(f)
+            sys.stderr.write(f"[CACHE] Loaded {len(game_cache)} games from disk cache\n")
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to load game cache: {e}\n")
+    
+    try:
+        if STANDINGS_CACHE_FILE.exists():
+            with open(STANDINGS_CACHE_FILE, 'rb') as f:
+                standings_cache = pickle.load(f)
+            if standings_cache.get('timestamp'):
+                age = (datetime.now() - standings_cache['timestamp']).total_seconds()
+                sys.stderr.write(f"[CACHE] Loaded standings from disk (age: {age:.0f}s)\n")
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to load standings cache: {e}\n")
+    
+    try:
+        if LEADERS_CACHE_FILE.exists():
+            with open(LEADERS_CACHE_FILE, 'rb') as f:
+                leaders_cache = pickle.load(f)
+            if leaders_cache.get('timestamp'):
+                age = (datetime.now() - leaders_cache['timestamp']).total_seconds()
+                sys.stderr.write(f"[CACHE] Loaded leaders from disk (age: {age:.0f}s)\n")
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to load leaders cache: {e}\n")
+    
+    try:
+        if SCHEDULE_CACHE_FILE.exists():
+            with open(SCHEDULE_CACHE_FILE, 'rb') as f:
+                schedule_cache = pickle.load(f)
+            sys.stderr.write(f"[CACHE] Loaded schedule for {len(schedule_cache)} dates from disk cache\n")
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to load schedule cache: {e}\n")
+
+def save_game_cache():
+    """Save game cache to disk."""
+    try:
+        with open(GAME_CACHE_FILE, 'wb') as f:
+            pickle.dump(game_cache, f)
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to save game cache: {e}\n")
+
+def save_standings_cache():
+    """Save standings cache to disk."""
+    try:
+        with open(STANDINGS_CACHE_FILE, 'wb') as f:
+            pickle.dump(standings_cache, f)
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to save standings cache: {e}\n")
+
+def save_leaders_cache():
+    """Save leaders cache to disk."""
+    try:
+        with open(LEADERS_CACHE_FILE, 'wb') as f:
+            pickle.dump(leaders_cache, f)
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to save leaders cache: {e}\n")
+
+def save_schedule_cache():
+    """Save schedule cache to disk."""
+    try:
+        with open(SCHEDULE_CACHE_FILE, 'wb') as f:
+            pickle.dump(schedule_cache, f)
+    except Exception as e:
+        sys.stderr.write(f"[CACHE] Failed to save schedule cache: {e}\n")
+
+# Load cache on module import
+load_persistent_cache()
+
+
+def prefetch_dates_range(center_date_str, days_before=2, days_after=2):
+    """Prefetch game data for a range of dates around center_date.
+    This loads schedule + game data into cache without blocking.
+    """
+    try:
+        center_date = datetime.strptime(center_date_str, '%Y-%m-%d').date()
+    except Exception:
+        center_date = datetime.now().date()
+    
+    dates_to_fetch = []
+    for offset in range(-days_before, days_after + 1):
+        date = center_date + timedelta(days=offset)
+        dates_to_fetch.append(date.strftime('%Y-%m-%d'))
+    
+    sys.stderr.write(f"[PREFETCH] Prefetching {len(dates_to_fetch)} dates: {dates_to_fetch[0]} to {dates_to_fetch[-1]}\n")
+    prefetch_start = time.time()
+    
+    # Fetch all schedules first (fast with caching)
+    all_game_ids = []
+    for date_str in dates_to_fetch:
+        games = get_nhl_games_for_date(date_str)
+        game_ids = [g.get('id') for g in games if g.get('id')]
+        all_game_ids.extend(game_ids)
+    
+    # Fetch all game data in batch (uses cache, only fetches missing)
+    if all_game_ids:
+        fetch_game_data_batch(all_game_ids, fetch_all=True)
+    
+    prefetch_time = (time.time() - prefetch_start) * 1000
+    sys.stderr.write(f"[PREFETCH] Completed prefetching {len(dates_to_fetch)} dates with {len(all_game_ids)} games in {prefetch_time:.0f}ms\n")
+    sys.stderr.flush()
+
+
+def prefetch_adjacent_dates(date_str, days=1):
+    """Prefetch dates adjacent to the given date (for carousel navigation).
+    Runs in background thread to not block response.
+    """
+    def _prefetch():
+        try:
+            prefetch_dates_range(date_str, days_before=days, days_after=days)
+        except Exception as e:
+            sys.stderr.write(f"[PREFETCH] Background prefetch failed: {e}\n")
+    
+    thread = threading.Thread(target=_prefetch, daemon=True)
+    thread.start()
+
+
+def preload_startup_data():
+    """Preload today ±2 days on server startup for instant carousel navigation."""
+    sys.stderr.write("[PRELOADER] Starting initial data prefetch...\n")
+    today = datetime.now().strftime('%Y-%m-%d')
+    prefetch_dates_range(today, days_before=2, days_after=2)
+    sys.stderr.write("[PRELOADER] Initial prefetch complete!\n")
 
 
 def get_team_logo_path(team_abbrev):
@@ -61,6 +205,7 @@ def fetch_game_data_batch(game_ids, fetch_all=True):
             api_time = (time.time() - api_start) * 1000
             sys.stderr.write(f"[API] Game {game_id} landing endpoint: {api_time:.0f}ms\n")
             game_cache[game_id] = data
+            save_game_cache()  # Persist to disk
             return game_id, data
         except Exception as e:
             sys.stderr.write(f"[API] Game {game_id} landing failed, trying boxscore...\n")
@@ -75,6 +220,7 @@ def fetch_game_data_batch(game_ids, fetch_all=True):
                     api_time = (time.time() - api_start) * 1000
                     sys.stderr.write(f"[API] Game {game_id} boxscore endpoint: {api_time:.0f}ms\n")
                     game_cache[game_id] = data
+                    save_game_cache()  # Persist to disk
                     return game_id, data
                 except Exception as e2:
                     sys.stderr.write(f"[ERROR] Game {game_id} both endpoints failed\n")
@@ -97,8 +243,8 @@ def fetch_game_data_batch(game_ids, fetch_all=True):
 def get_nhl_games_for_date(date_str):
     """Fetch schedule for a specific date string `YYYY-MM-DD`.
     Returns list of games or empty list on error.
+    Cached for 5 minutes to improve performance.
     """
-    sys.stderr.write(f"[SCHEDULE] Fetching schedule for date: {date_str}\n")
     if not date_str:
         return []
     # ensure we have a YYYY-MM-DD string
@@ -112,7 +258,17 @@ def get_nhl_games_for_date(date_str):
         datetime.strptime(date_val, '%Y-%m-%d')
     except Exception:
         return []
-
+    
+    # Check cache first
+    if date_val in schedule_cache:
+        cached = schedule_cache[date_val]
+        if cached.get('timestamp'):
+            elapsed = (datetime.now() - cached['timestamp']).total_seconds()
+            if elapsed < CACHE_DURATION:
+                sys.stderr.write(f"[CACHE] Using cached schedule for {date_val} (age: {elapsed:.0f}s)\n")
+                return cached.get('games', [])
+    
+    sys.stderr.write(f"[SCHEDULE] Cache miss, fetching schedule for date: {date_val}\n")
     url = f"https://api-web.nhle.com/v1/schedule/{date_val}"
     try:
         api_start = time.time()
@@ -125,6 +281,11 @@ def get_nhl_games_for_date(date_str):
             if wd.get('date') == date_val and 'games' in wd:
                 games.extend(wd['games'])
         sys.stderr.write(f"[API] Schedule API call: {api_time:.0f}ms, found {len(games)} games\n")
+        
+        # Cache the result
+        schedule_cache[date_val] = {'games': games, 'timestamp': datetime.now()}
+        save_schedule_cache()  # Persist to disk
+        
         sys.stderr.flush()
         return games
     except Exception as e:
@@ -133,6 +294,12 @@ def get_nhl_games_for_date(date_str):
 
 def get_todays_nhl_games():
     return get_nhl_games_for_date(datetime.now().strftime('%Y-%m-%d'))
+
+
+def trigger_prefetch_for_date(date_str):
+    """Trigger background prefetch of adjacent dates for smooth carousel navigation."""
+    # Prefetch ±1 day from requested date (runs in background)
+    prefetch_adjacent_dates(date_str, days=1)
 
 
 def get_game_boxscore(game_id):
@@ -866,6 +1033,7 @@ def fetch_standings_records():
                 # id_to_info remains empty because this endpoint doesn't provide numeric team ids
                 standings_cache['data'] = (id_to_info, norm_abbrev_map, id_to_abbrev)
                 standings_cache['timestamp'] = datetime.now()
+                save_standings_cache()  # Persist to disk
                 return id_to_info, norm_abbrev_map, id_to_abbrev
         except Exception:
             # fall through to older approach below
@@ -961,6 +1129,7 @@ def fetch_standings_records():
 
         standings_cache['data'] = (id_to_info, norm_abbrev_map, id_to_abbrev)
         standings_cache['timestamp'] = datetime.now()
+        save_standings_cache()  # Persist to disk
         return id_to_info, norm_abbrev_map, id_to_abbrev
     except Exception as e:
         try:
@@ -1291,6 +1460,7 @@ def fetch_skater_stat_leaders(categories=None, limit=-1):
         # Cache the result before returning
         leaders_cache['data'] = out
         leaders_cache['timestamp'] = datetime.now()
+        save_leaders_cache()  # Persist to disk
         return out
     except Exception:
         return {}
@@ -2389,6 +2559,9 @@ def get_games_data(date_str=None):
     
     sys.stderr.write(f"[FUNCTION] Normalized date: {date_str}\n")
     
+    # Trigger background prefetch of adjacent dates for smooth carousel navigation
+    trigger_prefetch_for_date(date_str)
+    
     games = get_nhl_games_for_date(date_str)
     
     if not games:
@@ -2746,3 +2919,6 @@ if __name__ == "__main__":
         sys.exit(1)
     
     main()
+else:
+    # When imported as a module (by Django), preload startup data
+    preload_startup_data()
