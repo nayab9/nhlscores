@@ -2560,6 +2560,37 @@ def get_games_data(date_str=None):
             # Convert to list of periods with goals
             scoring_summary = [{'period': period, 'goals': goals} for period, goals in period_groups.items()]
         
+        # Extract broadcast information from schedule data (more reliable than where-to-watch API)
+        where_to_watch = []
+        try:
+            # Look for broadcast info in the game data
+            tv_broadcasts = game.get('tvBroadcasts', []) or []
+            broadcast_list = []
+            for broadcast in tv_broadcasts:
+                network = broadcast.get('network', '')
+                market = broadcast.get('market', '')
+                country = broadcast.get('countryCode', '')
+                
+                if network:
+                    if country and market:
+                        formatted = f"{country} ({market}): {network}"
+                    elif country:
+                        formatted = f"{country}: {network}"
+                    elif market:
+                        formatted = f"{market}: {network}"
+                    else:
+                        formatted = network
+                    
+                    # Add with sort key: CA=0, US=1, others=2
+                    sort_key = 0 if country == 'CA' else (1 if country == 'US' else 2)
+                    broadcast_list.append((sort_key, formatted))
+            
+            # Sort by priority (CA first, then US, then others) and extract formatted strings
+            broadcast_list.sort(key=lambda x: x[0])
+            where_to_watch = [item[1] for item in broadcast_list]
+        except Exception as e:
+            sys.stderr.write(f"[WARNING] Failed to extract broadcast info for game {game_id}: {e}\n")
+        
         processed_games.append({
             'id': game_id,
             'away_team': {
@@ -2582,8 +2613,21 @@ def get_games_data(date_str=None):
             'period_info': period_info,
             'start_time': start_time,
             'start_time_utc': start_time_utc,
-            'scoring_summary': scoring_summary
+            'scoring_summary': scoring_summary,
+            'where_to_watch': where_to_watch
         })
+    
+    # Sort games: Live/In Progress first, then Scheduled, then Completed at the bottom
+    def game_sort_key(game):
+        status = game.get('status', '').lower()
+        if 'live' in status or 'progress' in status or 'period' in status or 'intermission' in status:
+            return 0  # Live games first
+        elif 'final' in status or 'official' in status or 'completed' in status:
+            return 2  # Completed games last
+        else:
+            return 1  # Scheduled games in the middle
+    
+    processed_games.sort(key=game_sort_key)
     
     # Format display date
     try:
