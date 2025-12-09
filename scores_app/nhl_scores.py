@@ -177,12 +177,16 @@ def format_scoring_summary(game_id, game_data=None):
         summary = game_data['boxscore'].get('summary')
 
     if summary and isinstance(summary, dict) and 'scoring' in summary:
-        for period_data in summary.get('scoring', []):
+        scoring_periods = summary.get('scoring', [])
+        sys.stderr.write(f"[SCORING] Found {len(scoring_periods)} periods in summary.scoring\n")
+        for period_data in scoring_periods:
             pd = period_data.get('periodDescriptor') or {}
             pnum = pd.get('number') or pd.get('period') or 0
             ptype = pd.get('periodType') or pd.get('type') or 'REG'
             pname = _period_name(ptype, pnum)
-            for g in period_data.get('goals', []) or []:
+            period_goals = period_data.get('goals', []) or []
+            sys.stderr.write(f"[SCORING] Period {pname}: {len(period_goals)} goals\n")
+            for g in period_goals:
                 # scorer
                 def _name_of(x):
                     if not x:
@@ -242,81 +246,86 @@ def format_scoring_summary(game_id, game_data=None):
 
                     return ''
 
-                scorer = _extract_scorer_from_goal(g)
-                # try to extract an id for the scorer from several possible shapes
-                scorer_id = None
                 try:
-                    if isinstance(g.get('scorer'), dict):
-                        scorer_id = g.get('scorer').get('id') or g.get('scorer').get('playerId')
-                    if not scorer_id and isinstance(g.get('player'), dict):
-                        scorer_id = g.get('player').get('id')
-                    # some payloads put 'scorerPlayer'
-                    if not scorer_id and isinstance(g.get('scorerPlayer'), dict):
-                        scorer_id = g.get('scorerPlayer').get('id')
-                except Exception:
+                    scorer = _extract_scorer_from_goal(g)
+                    # try to extract an id for the scorer from several possible shapes
                     scorer_id = None
-
-                scorer_goals = g.get('goalsToDate') or g.get('scorerGoals') or g.get('seasonGoals') or 0
-                assists = []
-                for a in g.get('assists', []) or []:
-                    # Try to include season assist totals when available and extract nested names
-                    # For assists keep structured data with player id when available
-                    aid = None
-                    aname = None
-                    atot = None
                     try:
-                        if isinstance(a, dict):
-                            # player wrapping
-                            p = a.get('player') if 'player' in a else a
-                            if isinstance(p, dict):
-                                aid = p.get('id') or p.get('playerId')
-                                # Extract name - handle nested 'default' structure
-                                fn = p.get('firstName', '')
-                                ln = p.get('lastName', '')
-                                # Check if firstName/lastName are dicts with 'default' key
-                                if isinstance(fn, dict):
-                                    fn = fn.get('default', '')
-                                if isinstance(ln, dict):
-                                    ln = ln.get('default', '')
-                                aname = p.get('fullName') or f"{fn} {ln}".strip()
-                                # If fullName is a dict, extract default
-                                if isinstance(aname, dict):
-                                    aname = aname.get('default', '')
-                            # assist totals
-                            for k in ('assistsToDate','seasonAssists','seasonTotal','assists'):
-                                if k in a:
-                                    atot = a.get(k)
-                                    break
-                            if atot is None and isinstance(p, dict):
-                                for k in ('assistsToDate','seasonAssists','seasonTotal','assists'):
-                                    if k in p:
-                                        atot = p.get(k)
-                                        break
-                        elif isinstance(a, str):
-                            aname = a
+                        if isinstance(g.get('scorer'), dict):
+                            scorer_id = g.get('scorer').get('id') or g.get('scorer').get('playerId')
+                        if not scorer_id and isinstance(g.get('player'), dict):
+                            scorer_id = g.get('player').get('id')
+                        # some payloads put 'scorerPlayer'
+                        if not scorer_id and isinstance(g.get('scorerPlayer'), dict):
+                            scorer_id = g.get('scorerPlayer').get('id')
                     except Exception:
-                        pass
+                        scorer_id = None
 
-                    display = aname or str(a)
-                    if atot is not None and display and not display.startswith('{'):
+                    scorer_goals = g.get('goalsToDate') or g.get('scorerGoals') or g.get('seasonGoals') or 0
+                    assists = []
+                    for a in g.get('assists', []) or []:
+                        # Try to include season assist totals when available and extract nested names
+                        # For assists keep structured data with player id when available
+                        aid = None
+                        aname = None
+                        atot = None
                         try:
-                            display = f"{display} ({int(atot)})"
+                            if isinstance(a, dict):
+                                # player wrapping
+                                p = a.get('player') if 'player' in a else a
+                                if isinstance(p, dict):
+                                    aid = p.get('id') or p.get('playerId')
+                                    # Extract name - handle nested 'default' structure
+                                    fn = p.get('firstName', '')
+                                    ln = p.get('lastName', '')
+                                    # Check if firstName/lastName are dicts with 'default' key
+                                    if isinstance(fn, dict):
+                                        fn = fn.get('default', '')
+                                    if isinstance(ln, dict):
+                                        ln = ln.get('default', '')
+                                    aname = p.get('fullName') or f"{fn} {ln}".strip()
+                                    # If fullName is a dict, extract default
+                                    if isinstance(aname, dict):
+                                        aname = aname.get('default', '')
+                                # assist totals
+                                for k in ('assistsToDate','seasonAssists','seasonTotal','assists'):
+                                    if k in a:
+                                        atot = a.get(k)
+                                        break
+                                if atot is None and isinstance(p, dict):
+                                    for k in ('assistsToDate','seasonAssists','seasonTotal','assists'):
+                                        if k in p:
+                                            atot = p.get(k)
+                                            break
+                            elif isinstance(a, str):
+                                aname = a
                         except Exception:
-                            display = f"{display} ({atot})"
-                    # Ensure we never return a dict as display - convert to string if needed
-                    if isinstance(display, dict):
-                        display = str(display.get('name', display.get('default', 'Unknown')))
-                    assists.append({'id': aid, 'name': aname, 'display': str(display)})
-                def _norm_abbrev(x):
-                    if not x:
-                        return ''
-                    if isinstance(x, dict):
-                        return x.get('default') or x.get('triCode') or x.get('abbrev') or x.get('shortName') or ''
-                    return str(x)
+                            pass
 
-                team_abbrev = _norm_abbrev(g.get('teamAbbrev') or (g.get('team') or {}).get('abbrev') or (g.get('team') or {}))
-                scorer_display = f"{scorer} ({scorer_goals})" if scorer else f"({scorer_goals})"
-                goals_out.append({'period': pname, 'time': g.get('timeInPeriod') or g.get('time') or '', 'team': team_abbrev, 'scorer': {'id': scorer_id, 'name': scorer, 'display': scorer_display}, 'assists': assists})
+                        display = aname or str(a)
+                        if atot is not None and display and not display.startswith('{'):
+                            try:
+                                display = f"{display} ({int(atot)})"
+                            except Exception:
+                                display = f"{display} ({atot})"
+                        # Ensure we never return a dict as display - convert to string if needed
+                        if isinstance(display, dict):
+                            display = str(display.get('name', display.get('default', 'Unknown')))
+                        assists.append({'id': aid, 'name': aname, 'display': str(display)})
+                    def _norm_abbrev(x):
+                        if not x:
+                            return ''
+                        if isinstance(x, dict):
+                            return x.get('default') or x.get('triCode') or x.get('abbrev') or x.get('shortName') or ''
+                        return str(x)
+
+                    team_abbrev = _norm_abbrev(g.get('teamAbbrev') or (g.get('team') or {}).get('abbrev') or (g.get('team') or {}))
+                    scorer_display = f"{scorer} ({scorer_goals})" if scorer else f"({scorer_goals})"
+                    goals_out.append({'period': pname, 'time': g.get('timeInPeriod') or g.get('time') or '', 'team': team_abbrev, 'scorer': {'id': scorer_id, 'name': scorer, 'display': scorer_display}, 'assists': assists})
+                except Exception as e:
+                    sys.stderr.write(f"[ERROR] Failed to process goal in {pname}: {e}\n")
+                    continue
+        sys.stderr.write(f"[SCORING] Total goals extracted: {len(goals_out)}\n")
         if goals_out:
             return goals_out
 
