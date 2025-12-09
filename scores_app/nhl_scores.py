@@ -17,39 +17,80 @@ import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
+import time
 
 # When True, force ANSI color codes even if stdout.isatty() is False
 FORCE_COLOR = False
 
 # Simple cache
 game_cache = {}
+standings_cache = {'data': None, 'timestamp': None}
+leaders_cache = {'data': None, 'timestamp': None}
+CACHE_DURATION = 300  # 5 minutes in seconds
 
 
-def fetch_game_data_batch(game_ids):
+def get_team_logo_path(team_abbrev):
+    """Get the local path for a team's logo. All logos are stored locally in static/team_logos/"""
+    if not team_abbrev:
+        return ''
+    return f'/static/team_logos/{team_abbrev}.svg'
+
+
+def fetch_game_data_batch(game_ids, fetch_all=True):
+    """
+    Fetch game data for multiple games concurrently.
+    If fetch_all=False, only fetches essential data (faster for scheduled games).
+    """
+    batch_start = time.time()
+    sys.stderr.write(f"[BATCH] Fetching data for {len(game_ids)} games (fetch_all={fetch_all})...\n")
     game_data = {}
 
     def fetch_single(game_id):
+        fetch_start = time.time()
         if game_id in game_cache:
+            sys.stderr.write(f"[CACHE] Game {game_id} found in cache\n")
             return game_id, game_cache[game_id]
-        urls = [f"https://api-web.nhle.com/v1/gamecenter/{game_id}/landing",
-                f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"]
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=10)
-                r.raise_for_status()
-                data = r.json()
-                game_cache[game_id] = data
-                return game_id, data
-            except Exception:
-                continue
+        
+        # Try landing endpoint first (has most data)
+        url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/landing"
+        try:
+            api_start = time.time()
+            r = requests.get(url, timeout=5)
+            r.raise_for_status()
+            data = r.json()
+            api_time = (time.time() - api_start) * 1000
+            sys.stderr.write(f"[API] Game {game_id} landing endpoint: {api_time:.0f}ms\n")
+            game_cache[game_id] = data
+            return game_id, data
+        except Exception as e:
+            sys.stderr.write(f"[API] Game {game_id} landing failed, trying boxscore...\n")
+            # Fallback to boxscore if landing fails
+            if fetch_all:
+                try:
+                    url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
+                    api_start = time.time()
+                    r = requests.get(url, timeout=5)
+                    r.raise_for_status()
+                    data = r.json()
+                    api_time = (time.time() - api_start) * 1000
+                    sys.stderr.write(f"[API] Game {game_id} boxscore endpoint: {api_time:.0f}ms\n")
+                    game_cache[game_id] = data
+                    return game_id, data
+                except Exception as e2:
+                    sys.stderr.write(f"[ERROR] Game {game_id} both endpoints failed\n")
+                    pass
         return game_id, None
 
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=10) as ex:
         futures = {ex.submit(fetch_single, gid): gid for gid in game_ids}
         for fut in as_completed(futures):
             gid, data = fut.result()
             if data:
                 game_data[gid] = data
+    
+    batch_time = (time.time() - batch_start) * 1000
+    sys.stderr.write(f"[BATCH] Completed fetching {len(game_data)}/{len(game_ids)} games in {batch_time:.0f}ms\n")
+    sys.stderr.flush()
     return game_data
 
 
@@ -57,6 +98,7 @@ def get_nhl_games_for_date(date_str):
     """Fetch schedule for a specific date string `YYYY-MM-DD`.
     Returns list of games or empty list on error.
     """
+    sys.stderr.write(f"[SCHEDULE] Fetching schedule for date: {date_str}\n")
     if not date_str:
         return []
     # ensure we have a YYYY-MM-DD string
@@ -73,15 +115,20 @@ def get_nhl_games_for_date(date_str):
 
     url = f"https://api-web.nhle.com/v1/schedule/{date_val}"
     try:
+        api_start = time.time()
         r = requests.get(url, timeout=10)
         r.raise_for_status()
         data = r.json()
+        api_time = (time.time() - api_start) * 1000
         games = []
         for wd in data.get('gameWeek', []):
             if wd.get('date') == date_val and 'games' in wd:
                 games.extend(wd['games'])
+        sys.stderr.write(f"[API] Schedule API call: {api_time:.0f}ms, found {len(games)} games\n")
+        sys.stderr.flush()
         return games
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"[ERROR] Schedule API failed: {e}\n")
         return []
 
 def get_todays_nhl_games():
@@ -223,7 +270,18 @@ def format_scoring_summary(game_id, game_data=None):
                             p = a.get('player') if 'player' in a else a
                             if isinstance(p, dict):
                                 aid = p.get('id') or p.get('playerId')
-                                aname = p.get('fullName') or (p.get('firstName','') + ' ' + p.get('lastName','')).strip()
+                                # Extract name - handle nested 'default' structure
+                                fn = p.get('firstName', '')
+                                ln = p.get('lastName', '')
+                                # Check if firstName/lastName are dicts with 'default' key
+                                if isinstance(fn, dict):
+                                    fn = fn.get('default', '')
+                                if isinstance(ln, dict):
+                                    ln = ln.get('default', '')
+                                aname = p.get('fullName') or f"{fn} {ln}".strip()
+                                # If fullName is a dict, extract default
+                                if isinstance(aname, dict):
+                                    aname = aname.get('default', '')
                             # assist totals
                             for k in ('assistsToDate','seasonAssists','seasonTotal','assists'):
                                 if k in a:
@@ -240,12 +298,15 @@ def format_scoring_summary(game_id, game_data=None):
                         pass
 
                     display = aname or str(a)
-                    if atot is not None and display:
+                    if atot is not None and display and not display.startswith('{'):
                         try:
                             display = f"{display} ({int(atot)})"
                         except Exception:
                             display = f"{display} ({atot})"
-                    assists.append({'id': aid, 'name': aname, 'display': display})
+                    # Ensure we never return a dict as display - convert to string if needed
+                    if isinstance(display, dict):
+                        display = str(display.get('name', display.get('default', 'Unknown')))
+                    assists.append({'id': aid, 'name': aname, 'display': str(display)})
                 def _norm_abbrev(x):
                     if not x:
                         return ''
@@ -713,7 +774,18 @@ def fetch_standings_records():
     - abbrev_to_info: {abbrev: {record, points, rank, streak}}
 
     Uses the public NHL statsapi endpoints. Returns empty maps on error.
+    Cached for 5 minutes to improve performance.
     """
+    global standings_cache
+    
+    # Check cache
+    if standings_cache['data'] is not None and standings_cache['timestamp'] is not None:
+        elapsed = (datetime.now() - standings_cache['timestamp']).total_seconds()
+        if elapsed < CACHE_DURATION:
+            sys.stderr.write(f"[CACHE] Using cached standings (age: {elapsed:.0f}s)\n")
+            return standings_cache['data']
+    
+    sys.stderr.write(f"[STANDINGS] Cache miss, fetching fresh standings...\n")
     id_to_info = {}
     abbrev_to_info = {}
     id_to_abbrev = {}
@@ -722,8 +794,11 @@ def fetch_standings_records():
         # First try the api-web 'now' standings endpoint which returns current standings by abbrev
         try:
             now_url = "https://api-web.nhle.com/v1/standings/now"
+            api_start = time.time()
             rnow = requests.get(now_url, timeout=8)
+            api_time = (time.time() - api_start) * 1000
             if rnow.status_code == 200:
+                sys.stderr.write(f"[API] Standings 'now' endpoint: {api_time:.0f}ms\n")
                 sjson = rnow.json()
                 # sjson contains a list under 'standings'
                 for entry in sjson.get('standings', []) or []:
@@ -780,6 +855,8 @@ def fetch_standings_records():
                             norm_abbrev_map[k] = inf
 
                 # id_to_info remains empty because this endpoint doesn't provide numeric team ids
+                standings_cache['data'] = (id_to_info, norm_abbrev_map, id_to_abbrev)
+                standings_cache['timestamp'] = datetime.now()
                 return id_to_info, norm_abbrev_map, id_to_abbrev
         except Exception:
             # fall through to older approach below
@@ -873,6 +950,8 @@ def fetch_standings_records():
                 if k and k not in norm_abbrev_map:
                     norm_abbrev_map[k] = inf
 
+        standings_cache['data'] = (id_to_info, norm_abbrev_map, id_to_abbrev)
+        standings_cache['timestamp'] = datetime.now()
         return id_to_info, norm_abbrev_map, id_to_abbrev
     except Exception as e:
         try:
@@ -1070,8 +1149,18 @@ def fetch_skater_stat_leaders(categories=None, limit=-1):
     categories (e.g. 'goals,assists,points'). Returns a dict mapping
     category -> list of leader entries {playerId, playerName, value}.
 
+    With caching: if data was fetched within CACHE_DURATION seconds, return cached data.
+
     This function is defensive: on any error it returns an empty dict.
     """
+    # Check cache first
+    if leaders_cache.get('data') and leaders_cache.get('timestamp'):
+        elapsed = (datetime.now() - leaders_cache['timestamp']).total_seconds()
+        if elapsed < CACHE_DURATION:
+            sys.stderr.write(f"[CACHE] Using cached leaders (age: {elapsed:.0f}s)\n")
+            return leaders_cache['data']
+    
+    sys.stderr.write(f"[LEADERS] Cache miss, fetching fresh leaders...\n")
     if categories is None:
         categories = ['goals', 'assists', 'points']
     if isinstance(categories, (list, tuple)):
@@ -1081,8 +1170,11 @@ def fetch_skater_stat_leaders(categories=None, limit=-1):
 
     url = f"https://api-web.nhle.com/v1/skater-stats-leaders/current?categories={cat_str}&limit={limit}"
     try:
+        api_start = time.time()
         r = requests.get(url, timeout=8)
         r.raise_for_status()
+        api_time = (time.time() - api_start) * 1000
+        sys.stderr.write(f"[API] Leaders endpoint: {api_time:.0f}ms\n")
         data = r.json()
         # Expecting either dict with category keys or a list — handle both
         out = {}
@@ -1187,6 +1279,9 @@ def fetch_skater_stat_leaders(categories=None, limit=-1):
             except Exception:
                 out = grouped
 
+        # Cache the result before returning
+        leaders_cache['data'] = out
+        leaders_cache['timestamp'] = datetime.now()
         return out
     except Exception:
         return {}
@@ -2164,6 +2259,423 @@ def get_score_output():
         
     # Return the collected string
     return redirected_output.getvalue()
+
+
+def get_games_data_skeleton(date_str=None):
+    """
+    Returns FAST skeleton game data with just schedule info (no slow API calls).
+    Used for initial page load - details loaded via AJAX after.
+    """
+    func_start = time.time()
+    sys.stderr.write(f"\n[FUNCTION] get_games_data_skeleton() - FAST MODE\n")
+    
+    # Normalize date
+    if date_str in ('yesterday', 'y'):
+        date_obj = datetime.now() - timedelta(days=1)
+        date_str = date_obj.strftime('%Y-%m-%d')
+    if date_str in ('today', 't', None):
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    games = get_nhl_games_for_date(date_str)
+    
+    if not games:
+        return {
+            'success': False,
+            'message': f'No NHL games found for {date_str}',
+            'games': [],
+            'date': date_str
+        }
+    
+    # Build skeleton game data from schedule only (no additional API calls)
+    processed_games = []
+    for game in games:
+        game_id = game.get('id')
+        away_team = game.get('awayTeam', {})
+        home_team = game.get('homeTeam', {})
+        
+        away_abbrev = away_team.get('abbrev', '')
+        home_abbrev = home_team.get('abbrev', '')
+        away_score = away_team.get('score', 0)
+        home_score = home_team.get('score', 0)
+        
+        game_state = game.get('gameState', 'UNKNOWN')
+        game_status = 'Scheduled'
+        if game_state in ('LIVE', 'CRIT'):
+            game_status = 'Live'
+        elif game_state in ('FINAL', 'OFF'):
+            game_status = 'Final'
+        
+        # Get start time for scheduled games
+        start_time = ''
+        if game_status == 'Scheduled':
+            start_time_utc = game.get('startTimeUTC', '')
+            if start_time_utc:
+                try:
+                    dt_utc = datetime.fromisoformat(start_time_utc.replace('Z', '+00:00'))
+                    dt_est = dt_utc - timedelta(hours=5)
+                    start_time = dt_est.strftime('%I:%M %p')
+                except:
+                    start_time = start_time_utc
+        
+        # Match the structure expected by the template
+        processed_games.append({
+            'id': game_id,
+            'status': game_status,
+            'start_time': start_time,
+            'period_info': '',
+            'away_team': {
+                'abbrev': away_abbrev,
+                'score': away_score,
+                'record': '',
+                'shots': 0,
+                'logo': get_team_logo_path(away_abbrev)
+            },
+            'home_team': {
+                'abbrev': home_abbrev,
+                'score': home_score,
+                'record': '',
+                'shots': 0,
+                'logo': get_team_logo_path(home_abbrev)
+            },
+            'scoring_summary': None,
+            'skeleton': True  # Flag to indicate this is skeleton data
+        })
+    
+    func_total = (time.time() - func_start) * 1000
+    sys.stderr.write(f"[FUNCTION] Skeleton data ready in {func_total:.0f}ms\n")
+    
+    # Format display date consistently with full data
+    try:
+        display_date = datetime.strptime(date_str, '%Y-%m-%d').strftime('%A, %B %d, %Y')
+    except:
+        display_date = date_str
+    
+    return {
+        'success': True,
+        'games': processed_games,
+        'date': date_str,
+        'display_date': display_date,
+        'count': len(processed_games),
+        'leaders': {'goals': [], 'assists': [], 'points': []},
+        'skeleton': True
+    }
+
+
+def get_games_data(date_str=None):
+    """
+    Returns structured game data as a dictionary for use in Django templates.
+    This function provides JSON-serializable data without ANSI color codes.
+    """
+    func_start = time.time()
+    sys.stderr.write(f"\n[FUNCTION] get_games_data() started for date: {date_str}\n")
+    
+    # Normalize date
+    if date_str in ('yesterday', 'y'):
+        date_obj = datetime.now() - timedelta(days=1)
+        date_str = date_obj.strftime('%Y-%m-%d')
+    if date_str in ('today', 't', None):
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    sys.stderr.write(f"[FUNCTION] Normalized date: {date_str}\n")
+    
+    games = get_nhl_games_for_date(date_str)
+    
+    if not games:
+        sys.stderr.write(f"[FUNCTION] No games found for {date_str}\n")
+        return {
+            'success': False,
+            'message': f'No NHL games found for {date_str}',
+            'games': [],
+            'date': date_str
+        }
+    
+    # Fetch all game data concurrently
+    game_ids = [game.get('id') for game in games if game.get('id')]
+    sys.stderr.write(f"[FUNCTION] Fetching detailed data for {len(game_ids)} games...\n")
+    all_game_data = fetch_game_data_batch(game_ids)
+    
+    # Fetch standings for team records
+    sys.stderr.write(f"[FUNCTION] Fetching team standings...\n")
+    standings_start = time.time()
+    id_to_info, abbrev_to_info, id_to_abbrev = fetch_standings_records()
+    standings_time = (time.time() - standings_start) * 1000
+    sys.stderr.write(f"[FUNCTION] Standings fetched in {standings_time:.0f}ms\n")
+    
+    # Fetch league leaders ONCE for all games (optimization)
+    # We'll use this data for both team leader indicators and the leaderboard
+    sys.stderr.write(f"[FUNCTION] Fetching league leaders...\n")
+    leaders_start = time.time()
+    try:
+        leaders_data = fetch_skater_stat_leaders(categories=['goals', 'assists', 'points'], limit=100)
+        leaders_time = (time.time() - leaders_start) * 1000
+        sys.stderr.write(f"[FUNCTION] League leaders fetched in {leaders_time:.0f}ms\n")
+        
+        # Build team leader maps: {team_abbrev: {category: [player_ids]}}
+        team_top_leaders = {}
+        for category in ['goals', 'assists', 'points']:
+            team_values = {}  # {team: {player_id: value}}
+            
+            for entry in leaders_data.get(category, []):
+                team_abbrev = entry.get('teamAbbrev', '')
+                player_id = entry.get('playerId')
+                value = entry.get('value', 0)
+                
+                if team_abbrev and player_id:
+                    if team_abbrev not in team_values:
+                        team_values[team_abbrev] = {}
+                    team_values[team_abbrev][player_id] = value
+            
+            # Find the leader(s) for each team (highest value)
+            for team, players in team_values.items():
+                if team not in team_top_leaders:
+                    team_top_leaders[team] = {}
+                if players:
+                    max_value = max(players.values())
+                    team_top_leaders[team][category] = [pid for pid, val in players.items() if val == max_value]
+    except Exception:
+        team_top_leaders = {}
+        leaders_data = {'goals': [], 'assists': [], 'points': []}
+    
+    # Process each game
+    processed_games = []
+    for game in games:
+        game_id = game.get('id')
+        game_data = all_game_data.get(game_id) if game_id else None
+        
+        # Extract team info
+        away_team = game.get('awayTeam', {})
+        home_team = game.get('homeTeam', {})
+        
+        away_abbrev = away_team.get('abbrev', '')
+        home_abbrev = home_team.get('abbrev', '')
+        
+        # Get scores
+        away_score = away_team.get('score', 0)
+        home_score = home_team.get('score', 0)
+        
+        # Get game state
+        game_state = game.get('gameState', 'UNKNOWN')
+        game_status = 'Scheduled'
+        if game_state in ('LIVE', 'CRIT'):
+            game_status = 'Live'
+        elif game_state in ('FINAL', 'OFF'):
+            game_status = 'Final'
+        
+        # Get period info
+        period_info = ''
+        if game_data:
+            period = game_data.get('period', game_data.get('currentPeriod', 0))
+            clock = game_data.get('clock', game_data.get('periodTimeRemaining', ''))
+            if period and game_status == 'Live':
+                if period <= 3:
+                    period_info = f"Period {period}"
+                elif period == 4:
+                    period_info = "OT"
+                else:
+                    period_info = f"OT{period - 3}"
+                if clock:
+                    period_info += f" - {clock}"
+        
+        # Get start time for scheduled games
+        start_time = ''
+        if game_status == 'Scheduled':
+            start_time_utc = game.get('startTimeUTC', '')
+            if start_time_utc:
+                try:
+                    # Parse UTC time and convert to EST
+                    dt_utc = datetime.fromisoformat(start_time_utc.replace('Z', '+00:00'))
+                    # Convert to EST (UTC-5)
+                    dt_est = dt_utc - timedelta(hours=5)
+                    start_time = dt_est.strftime('%I:%M %p')
+                except:
+                    start_time = start_time_utc
+        
+        # Get team records
+        away_record = ''
+        home_record = ''
+        if abbrev_to_info:
+            away_info = abbrev_to_info.get(away_abbrev, {})
+            home_info = abbrev_to_info.get(home_abbrev, {})
+            if away_info:
+                # Use the 'record' string if available, otherwise build it
+                away_record = away_info.get('record', '')
+                if not away_record:
+                    w = away_info.get('wins', 0)
+                    l = away_info.get('losses', 0)
+                    ot = away_info.get('otLosses', 0)
+                    away_record = f"{w}-{l}-{ot}" if w or l or ot else ''
+            if home_info:
+                # Use the 'record' string if available, otherwise build it
+                home_record = home_info.get('record', '')
+                if not home_record:
+                    w = home_info.get('wins', 0)
+                    l = home_info.get('losses', 0)
+                    ot = home_info.get('otLosses', 0)
+                    home_record = f"{w}-{l}-{ot}" if w or l or ot else ''
+        
+        # Get shots on goal
+        away_shots = ''
+        home_shots = ''
+        if game_data and game_status != 'Scheduled':
+            try:
+                away_shots = game_data.get('awayTeam', {}).get('sog', '')
+                home_shots = game_data.get('homeTeam', {}).get('sog', '')
+            except:
+                pass
+        
+        # Get scoring summary with team leader indicators (using pre-fetched data)
+        scoring_summary = []
+        if game_data and game_status != 'Scheduled':
+            raw_summary = format_scoring_summary(game_id, game_data)
+            
+            # Mark leaders in scoring summary using pre-fetched team_top_leaders
+            if team_top_leaders:
+                for goal in raw_summary:
+                    team = goal.get('team', '')
+                    scorer_id = goal.get('scorer', {}).get('id')
+                    
+                    if team in team_top_leaders and scorer_id:
+                        goal['scorer']['is_goals_leader'] = scorer_id in team_top_leaders[team].get('goals', [])
+                        goal['scorer']['is_assists_leader'] = scorer_id in team_top_leaders[team].get('assists', [])
+                        goal['scorer']['is_points_leader'] = scorer_id in team_top_leaders[team].get('points', [])
+                    
+                    # Mark assists leaders too
+                    for assist in goal.get('assists', []):
+                        assist_id = assist.get('id')
+                        if team in team_top_leaders and assist_id:
+                            assist['is_goals_leader'] = assist_id in team_top_leaders[team].get('goals', [])
+                            assist['is_assists_leader'] = assist_id in team_top_leaders[team].get('assists', [])
+                            assist['is_points_leader'] = assist_id in team_top_leaders[team].get('points', [])
+            
+            # Group by period for easier template rendering
+            period_groups = {}
+            for goal in raw_summary:
+                period = goal.get('period', 'Unknown')
+                if period not in period_groups:
+                    period_groups[period] = []
+                period_groups[period].append(goal)
+            # Convert to list of periods with goals
+            scoring_summary = [{'period': period, 'goals': goals} for period, goals in period_groups.items()]
+        
+        processed_games.append({
+            'id': game_id,
+            'away_team': {
+                'abbrev': away_abbrev,
+                'name': away_team.get('name', {}).get('default', away_abbrev),
+                'score': away_score,
+                'record': away_record,
+                'shots': away_shots,
+                'logo': get_team_logo_path(away_abbrev)
+            },
+            'home_team': {
+                'abbrev': home_abbrev,
+                'name': home_team.get('name', {}).get('default', home_abbrev),
+                'score': home_score,
+                'record': home_record,
+                'shots': home_shots,
+                'logo': get_team_logo_path(home_abbrev)
+            },
+            'status': game_status,
+            'period_info': period_info,
+            'start_time': start_time,
+            'scoring_summary': scoring_summary
+        })
+    
+    # Format display date
+    try:
+        display_date = datetime.strptime(date_str, '%Y-%m-%d').strftime('%A, %B %d, %Y')
+    except:
+        display_date = date_str
+    
+    # Process leaders data for display (using already-fetched data)
+    print(f"[FUNCTION] Processing {len(processed_games)} games for display...")
+    leaders = process_leaders_for_display(leaders_data)
+    
+    func_total = (time.time() - func_start) * 1000
+    print(f"[FUNCTION] get_games_data() completed in {func_total:.0f}ms")
+    print(f"[FUNCTION] Returning {len(processed_games)} processed games\\n")
+    sys.stdout.flush()
+    
+    return {
+        'success': True,
+        'games': processed_games,
+        'date': date_str,
+        'display_date': display_date,
+        'count': len(processed_games),
+        'leaders': leaders
+    }
+
+
+def process_leaders_for_display(leaders_data):
+    """
+    Process already-fetched leader data for display.
+    Takes the raw API response and formats it for the template.
+    """
+    result = {
+        'goals': [],
+        'assists': [],
+        'points': []
+    }
+    
+    try:
+        for category in ['goals', 'assists', 'points']:
+            raw_list = leaders_data.get(category, [])
+            # Only take top 25 for display
+            for entry in raw_list[:25]:
+                player_name = entry.get('playerName', 'Unknown')
+                player_id = entry.get('playerId')
+                value = entry.get('value', 0)
+                team_abbrev = entry.get('teamAbbrev', '')
+                
+                result[category].append({
+                    'id': player_id,
+                    'name': player_name,
+                    'value': value,
+                    'team': team_abbrev
+                })
+    except Exception:
+        pass
+    
+    return result
+
+
+def get_league_leaders():
+    """
+    DEPRECATED: This function is kept for backwards compatibility but is no longer used.
+    Leaders are now fetched once in get_games_data() for efficiency.
+    """
+    try:
+        leaders_data = fetch_skater_stat_leaders(categories=['goals', 'assists', 'points'], limit=25)
+        
+        result = {
+            'goals': [],
+            'assists': [],
+            'points': []
+        }
+        
+        for category in ['goals', 'assists', 'points']:
+            raw_list = leaders_data.get(category, [])
+            for entry in raw_list:
+                player_name = entry.get('playerName', 'Unknown')
+                player_id = entry.get('playerId')
+                value = entry.get('value', 0)
+                team_abbrev = entry.get('teamAbbrev', '')
+                
+                result[category].append({
+                    'id': player_id,
+                    'name': player_name,
+                    'value': value,
+                    'team': team_abbrev
+                })
+        
+        return result
+    except Exception as e:
+        # Return empty leaders on error
+        return {
+            'goals': [],
+            'assists': [],
+            'points': []
+        }
 
 
 # Ensure the script doesn't run automatically when imported by Django

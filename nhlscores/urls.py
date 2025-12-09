@@ -21,6 +21,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Map the URL 'nhl/' to your app's URLs
-    path('nhl/', include('scores_app.urls')), # <-- ADD THIS LINE
+    # Map the root URL to your app's URLs
+    path('', include('scores_app.urls')),  # Now accessible at /
 ]

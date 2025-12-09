@@ -1,19 +1,1248 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .date-navigation {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .header .date {
+            color: #2d3748;
+            font-size: 1.3em;
+            font-weight: 600;
+            min-width: 280px;
+            text-align: center;
+        }
+
+        .date-nav-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            font-size: 1.3em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .date-nav-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .date-nav-btn:active {
+            transform: scale(0.95);
+        }
+
+        .today-btn {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(72, 187, 120, 0.4);
+        }
+
+        .today-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.6);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-icon {
+            margin-right: 8px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .games-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .game-header {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-live {
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        .status-final {
+            background: #4299e1;
+        }
+
+        .status-scheduled {
+            background: #ed8936;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .game-body {
+            padding: 25px;
+        }
+
+        .matchup {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .team {
+            flex: 1;
+            text-align: center;
+        }
+
+        .team-away {
+            text-align: left;
+        }
+
+        .team-home {
+            text-align: right;
+        }
+
+        .team-logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 10px;
+            object-fit: contain;
+        }
+
+        .team-name {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .team-record {
+            font-size: 0.9em;
+            color: #718096;
+        }
+
+        .team-detail {
+            font-size: 0.85em;
+            color: #718096;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .team-detail.visible {
+            display: block;
+        }
+
+        .score-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+        }
+
+        .score {
+            font-size: 3em;
+            font-weight: 700;
+            color: #2d3748;
+            line-height: 1;
+        }
+
+        .score-separator {
+            margin: 0 10px;
+            color: #cbd5e0;
+        }
+
+        .winner-score {
+            color: #48bb78;
+        }
+
+        .vs {
+            color: #cbd5e0;
+            font-size: 1.5em;
+            font-weight: 300;
+        }
+
+        .game-info {
+            text-align: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .game-info-item {
+            display: inline-block;
+            margin: 0 15px;
+            color: #4a5568;
+            font-size: 0.9em;
+        }
+
+        .game-info-label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .scoring-summary {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .scoring-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .scoring-period {
+            margin-bottom: 15px;
+        }
+
+        .period-header {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+
+        .goal {
+            display: flex;
+            align-items: start;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .goal-time {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 50px;
+            margin-right: 10px;
+        }
+
+        .goal-team {
+            font-weight: 600;
+            color: #2d3748;
+            min-width: 50px;
+            margin-right: 10px;
+        }
+
+        .goal-details {
+            flex: 1;
+            color: #4a5568;
+        }
+
+        .scorer {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .assists {
+            color: #718096;
+            font-size: 0.95em;
+            margin-top: 3px;
+        }
+
+        .no-games {
+            background: white;
+            border-radius: 15px;
+            padding: 60px 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .no-games-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .no-games h2 {
+            color: #2d3748;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        .no-games p {
+            color: #718096;
+            font-size: 1.1em;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        .last-updated {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        /* Leaderboard Styles */
+        .leaderboard-section {
+            margin: 40px 0;
+        }
+
+        .leaderboard-title {
+            text-align: center;
+            color: white;
+            font-size: 2em;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        .leaderboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        @media (max-width: 768px) {
+            .leaderboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .leader-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .leader-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: 700;
+        }
+
+        .leader-header.goals {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        .leader-header.assists {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+        }
+
+        .leader-header.points {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #2d3748;
+        }
+
+        .leader-list {
+            padding: 20px;
+        }
+
+        .leader-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f7fafc;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .leader-item:hover {
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+
+        .leader-item.hidden {
+            display: none;
+        }
+
+        .leader-rank {
+            font-weight: 700;
+            color: #667eea;
+            min-width: 35px;
+            font-size: 1.1em;
+        }
+
+        .leader-rank.top3 {
+            color: #f5576c;
+        }
+
+        .leader-info {
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .leader-name {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 1em;
+        }
+
+        .leader-team {
+            font-size: 0.85em;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        .leader-value {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 1.2em;
+            margin-left: auto;
+        }
+
+        .expand-btn {
+            width: 100%;
+            padding: 12px;
+            background: #edf2f7;
+            border: none;
+            color: #667eea;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+        }
+
+        .expand-btn:hover {
+            background: #e2e8f0;
+            color: #764ba2;
+        }
+
+        .expand-btn:active {
+            background: #cbd5e0;
+        }
+    </style>
 </head>
 <body>
-    <div style="max-width: 900px; margin: 0 auto; padding: 20px;">
-        <h1 style="text-align: center;">{{ page_title }}</h1>
-        
-        <p>This data was generated by the NHL Score Retriever script:</p>
+    <div class="container">
+        <div class="header">
+            <h1>🏒 {{ page_title }}</h1>
+            <div class="date-navigation">
+                <button class="date-nav-btn" onclick="changeDate(-1)" title="Previous Day">←</button>
+                <div class="date" id="game-date" data-current-date="{{ games_data.date }}">{{ games_data.display_date }}</div>
+                <button class="date-nav-btn" onclick="changeDate(1)" title="Next Day">→</button>
+            </div>
+            <button class="today-btn" onclick="goToToday()" style="margin-bottom: 15px;">📅 Today</button>
+            <div class="controls">
+                <button class="btn" id="refresh-btn" onclick="refreshScores()">
+                    <span class="btn-icon">🔄</span>
+                    Refresh Scores
+                </button>
+                <button class="btn" onclick="toggleScoringDetails()">
+                    <span class="btn-icon">📊</span>
+                    <span id="toggle-text">Show Details</span>
+                </button>
+                <button class="btn" onclick="toggleLeaderboard()">
+                    <span class="btn-icon">🏆</span>
+                    <span id="leaderboard-toggle-text">Show League Leaders</span>
+                </button>
+            </div>
+        </div>
 
-        <pre style="background-color: #2e3436; color: #fff; padding: 15px; border-radius: 5px; font-family: 'Consolas', 'Courier New', monospace; white-space: pre-wrap;">
-{{ script_output }}
-        </pre>
-        
-        <p style="margin-top: 20px;">Scores are live as of the page load time.</p>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Loading scores...</div>
+        </div>
+
+        <!-- League Leaders Section -->
+        {% if games_data.leaders %}
+        <div class="leaderboard-section" id="leaderboard-section" style="display: none;">
+            <h2 class="leaderboard-title">🏆 League Leaders</h2>
+            <div class="leaderboard-grid" id="leaderboard-container">
+                <!-- Goals Leaders -->
+                <div class="leader-card">
+                    <div class="leader-header goals">🏒 Goals</div>
+                    <div class="leader-list">
+                        {% for player in games_data.leaders.goals %}
+                        <div class="leader-item {% if forloop.counter > 10 %}hidden{% endif %}" data-category="goals">
+                            <div class="leader-rank {% if forloop.counter <= 3 %}top3{% endif %}">{{ forloop.counter }}</div>
+                            <div class="leader-info">
+                                <div class="leader-name">{{ player.name }}</div>
+                                <div class="leader-team">{{ player.team }}</div>
+                            </div>
+                            <div class="leader-value">{{ player.value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if games_data.leaders.goals|length > 10 %}
+                    <button class="expand-btn" onclick="toggleLeaders('goals')">
+                        <span id="goals-btn-text">▼ Show Top 25</span>
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Assists Leaders -->
+                <div class="leader-card">
+                    <div class="leader-header assists">🅰️ Assists</div>
+                    <div class="leader-list">
+                        {% for player in games_data.leaders.assists %}
+                        <div class="leader-item {% if forloop.counter > 10 %}hidden{% endif %}" data-category="assists">
+                            <div class="leader-rank {% if forloop.counter <= 3 %}top3{% endif %}">{{ forloop.counter }}</div>
+                            <div class="leader-info">
+                                <div class="leader-name">{{ player.name }}</div>
+                                <div class="leader-team">{{ player.team }}</div>
+                            </div>
+                            <div class="leader-value">{{ player.value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if games_data.leaders.assists|length > 10 %}
+                    <button class="expand-btn" onclick="toggleLeaders('assists')">
+                        <span id="assists-btn-text">▼ Show Top 25</span>
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Points Leaders -->
+                <div class="leader-card">
+                    <div class="leader-header points">★ Points</div>
+                    <div class="leader-list">
+                        {% for player in games_data.leaders.points %}
+                        <div class="leader-item {% if forloop.counter > 10 %}hidden{% endif %}" data-category="points">
+                            <div class="leader-rank {% if forloop.counter <= 3 %}top3{% endif %}">{{ forloop.counter }}</div>
+                            <div class="leader-info">
+                                <div class="leader-name">{{ player.name }}</div>
+                                <div class="leader-team">{{ player.team }}</div>
+                            </div>
+                            <div class="leader-value">{{ player.value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if games_data.leaders.points|length > 10 %}
+                    <button class="expand-btn" onclick="toggleLeaders('points')">
+                        <span id="points-btn-text">▼ Show Top 25</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div id="games-container">
+            {% if games_data.success and games_data.games %}
+                <div class="games-grid">
+                    {% for game in games_data.games %}
+                    <div class="game-card">
+                        <div class="game-header">
+                            <div class="status-badge status-{{ game.status|lower }}">
+                                {{ game.status }}
+                            </div>
+                            <div>
+                                {% if game.period_info %}
+                                    {{ game.period_info }}
+                                {% elif game.start_time %}
+                                    {{ game.start_time }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="game-body">
+                            <div class="matchup">
+                                <div class="team team-away">
+                                    {% if game.away_team.logo %}
+                                    <img src="{{ game.away_team.logo }}" alt="{{ game.away_team.abbrev }}" class="team-logo">
+                                    {% endif %}
+                                    <div class="team-name">{{ game.away_team.abbrev }}</div>
+                                    {% if game.scoring_summary %}
+                                    <div class="team-detail" data-game-id="{{ game.id }}">
+                                        {% if game.away_team.shots %}<div>Shots: {{ game.away_team.shots }}</div>{% endif %}
+                                        {% if game.away_team.record %}<div>{{ game.away_team.record }}</div>{% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="score-container">
+                                    {% if game.status != 'Scheduled' %}
+                                        <div>
+                                            <span class="score {% if game.away_team.score > game.home_team.score %}winner-score{% endif %}">
+                                                {{ game.away_team.score }}
+                                            </span>
+                                            <span class="score-separator">-</span>
+                                            <span class="score {% if game.home_team.score > game.away_team.score %}winner-score{% endif %}">
+                                                {{ game.home_team.score }}
+                                            </span>
+                                        </div>
+                                    {% else %}
+                                        <div class="vs">VS</div>
+                                    {% endif %}
+                                </div>
+                                <div class="team team-home">
+                                    {% if game.home_team.logo %}
+                                    <img src="{{ game.home_team.logo }}" alt="{{ game.home_team.abbrev }}" class="team-logo">
+                                    {% endif %}
+                                    <div class="team-name">{{ game.home_team.abbrev }}</div>
+                                    {% if game.scoring_summary %}
+                                    <div class="team-detail" data-game-id="{{ game.id }}">
+                                        {% if game.home_team.shots %}<div>Shots: {{ game.home_team.shots }}</div>{% endif %}
+                                        {% if game.home_team.record %}<div>{{ game.home_team.record }}</div>{% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if game.scoring_summary %}
+                            <div class="scoring-summary" style="display: none;">
+                                <div class="scoring-title">⚡ Scoring Summary</div>
+                                {% for period_group in game.scoring_summary %}
+                                <div class="scoring-period">
+                                    <div class="period-header">{{ period_group.period }}</div>
+                                    {% for goal in period_group.goals %}
+                                    <div class="goal">
+                                        <div class="goal-time">{{ goal.time }}</div>
+                                        <div class="goal-team">{{ goal.team }}</div>
+                                        <div class="goal-details">
+                                            <div class="scorer">
+                                                {{ goal.scorer.display }}
+                                                {% if goal.scorer.is_goals_leader %}<span title="Team Leader in Goals">🏒</span>{% endif %}
+                                                {% if goal.scorer.is_assists_leader %}<span title="Team Leader in Assists">🅰️</span>{% endif %}
+                                                {% if goal.scorer.is_points_leader %}<span title="Team Leader in Points">★</span>{% endif %}
+                                            </div>
+                                            {% if goal.assists %}
+                                            <div class="assists">
+                                                Assists: 
+                                                {% for assist in goal.assists %}
+                                                    {{ assist.display }}{% if assist.is_goals_leader %}<span title="Team Leader in Goals">🏒</span>{% endif %}{% if assist.is_assists_leader %}<span title="Team Leader in Assists">🅰️</span>{% endif %}{% if assist.is_points_leader %}<span title="Team Leader in Points">★</span>{% endif %}{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-games">
+                    <div class="no-games-icon">🏒</div>
+                    <h2>No Games Today</h2>
+                    <p>{{ games_data.message|default:"Check back later for upcoming games!" }}</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <div class="last-updated" id="last-updated">
+                Last updated: <span id="update-time">Just now</span>
+            </div>
+        </div>
     </div>
+
+    <script>
+        let detailsVisible = false;
+        let currentDate = document.getElementById('game-date').getAttribute('data-current-date');
+        let isSkeletonData = {{ games_data.skeleton|yesno:"true,false" }};
+
+        // If we loaded skeleton data, automatically fetch full data in background
+        if (isSkeletonData) {
+            console.log('[PROGRESSIVE LOAD] Skeleton data loaded, fetching full details...');
+            setTimeout(() => {
+                loadFullDetailsInBackground();
+            }, 100);
+        }
+
+        async function loadFullDetailsInBackground() {
+            console.log('[PROGRESSIVE LOAD] Fetching full game details...');
+            const startTime = performance.now();
+            
+            try {
+                const response = await fetch(`?format=json&date=${currentDate}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+                
+                const data = await response.json();
+                const loadTime = Math.round(performance.now() - startTime);
+                console.log(`[PROGRESSIVE LOAD] Full details loaded in ${loadTime}ms`);
+                
+                if (data.success && data.games && data.games.length > 0) {
+                    renderGames(data);
+                    updateTimestamp();
+                }
+            } catch (error) {
+                console.error('[PROGRESSIVE LOAD] Error loading full details:', error);
+            }
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            document.getElementById('update-time').textContent = timeString;
+        }
+
+        function changeDate(days) {
+            // Parse date as YYYY-MM-DD and add days without timezone issues
+            const parts = currentDate.split('-');
+            const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            date.setDate(date.getDate() + days);
+            
+            // Format back to YYYY-MM-DD
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const newDateStr = `${year}-${month}-${day}`;
+            
+            loadGamesForDate(newDateStr);
+        }
+
+        function goToToday() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
+            loadGamesForDate(todayStr);
+        }
+
+        async function loadGamesForDate(dateStr) {
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('games-container');
+            
+            loading.classList.add('active');
+            container.style.opacity = '0.5';
+            
+            try {
+                // FIRST: Load skeleton data FAST (just like initial page load)
+                console.log('[PROGRESSIVE LOAD] Fetching skeleton data for date:', dateStr);
+                const skeletonStart = performance.now();
+                
+                const skeletonResponse = await fetch(`?format=json&date=${dateStr}&skeleton=true`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                if (!skeletonResponse.ok) {
+                    const errorText = await skeletonResponse.text();
+                    console.error('Server error:', errorText);
+                    throw new Error(`Failed to fetch data: ${skeletonResponse.status}`);
+                }
+                
+                const skeletonData = await skeletonResponse.json();
+                const skeletonTime = performance.now() - skeletonStart;
+                console.log(`[PROGRESSIVE LOAD] Skeleton data loaded in ${skeletonTime.toFixed(0)}ms`);
+                
+                currentDate = skeletonData.date;
+                const dateElement = document.getElementById('game-date');
+                if (dateElement) {
+                    dateElement.setAttribute('data-current-date', skeletonData.date);
+                    dateElement.textContent = skeletonData.display_date || skeletonData.date;
+                }
+                
+                if (skeletonData.success && skeletonData.games && skeletonData.games.length > 0) {
+                    renderGames(skeletonData);
+                } else {
+                    renderNoGames(skeletonData.message || 'No games found for this date');
+                }
+                
+                updateTimestamp();
+                
+                // Hide loading indicator after skeleton loads
+                loading.classList.remove('active');
+                container.style.opacity = '1';
+                
+                // SECOND: Load full details in background (if we have games)
+                if (skeletonData.success && skeletonData.games && skeletonData.games.length > 0) {
+                    console.log('[PROGRESSIVE LOAD] Fetching full details in background...');
+                    const fullStart = performance.now();
+                    
+                    const fullResponse = await fetch(`?format=json&date=${dateStr}`, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    
+                    if (fullResponse.ok) {
+                        const fullData = await fullResponse.json();
+                        const fullTime = performance.now() - fullStart;
+                        console.log(`[PROGRESSIVE LOAD] Full details loaded in ${fullTime.toFixed(0)}ms`);
+                        
+                        if (fullData.success && fullData.games && fullData.games.length > 0) {
+                            renderGames(fullData);
+                            updateTimestamp();
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error loading games:', error);
+                alert(`Failed to load games: ${error.message}`);
+                loading.classList.remove('active');
+                container.style.opacity = '1';
+            }
+        }
+
+        function toggleScoringDetails() {
+            detailsVisible = !detailsVisible;
+            const summaries = document.querySelectorAll('.scoring-summary');
+            const teamDetails = document.querySelectorAll('.team-detail');
+            const toggleText = document.getElementById('toggle-text');
+            
+            summaries.forEach(summary => {
+                summary.style.display = detailsVisible ? 'block' : 'none';
+            });
+            
+            teamDetails.forEach(detail => {
+                if (detailsVisible) {
+                    detail.classList.add('visible');
+                } else {
+                    detail.classList.remove('visible');
+                }
+            });
+            
+            toggleText.textContent = detailsVisible ? 'Hide Details' : 'Show Details';
+        }
+
+        // Track expanded state for each leaderboard
+        const expandedLeaders = {
+            goals: false,
+            assists: false,
+            points: false
+        };
+
+        let leaderboardVisible = false;
+
+        function toggleLeaderboard() {
+            leaderboardVisible = !leaderboardVisible;
+            const section = document.getElementById('leaderboard-section');
+            const toggleText = document.getElementById('leaderboard-toggle-text');
+            
+            if (section) {
+                section.style.display = leaderboardVisible ? 'block' : 'none';
+            }
+            
+            if (toggleText) {
+                toggleText.textContent = leaderboardVisible ? 'Hide League Leaders' : 'Show League Leaders';
+            }
+        }
+
+        function toggleLeaders(category) {
+            expandedLeaders[category] = !expandedLeaders[category];
+            const items = document.querySelectorAll(`.leader-item[data-category="${category}"]`);
+            const btnText = document.getElementById(`${category}-btn-text`);
+            
+            if (items && items.length > 0) {
+                items.forEach((item, index) => {
+                    if (index >= 10) {
+                        item.classList.toggle('hidden', !expandedLeaders[category]);
+                    }
+                });
+            }
+            
+            if (btnText) {
+                btnText.textContent = expandedLeaders[category] ? '▲ Show Top 10' : '▼ Show Top 25';
+            }
+        }
+
+        async function refreshScores() {
+            const btn = document.getElementById('refresh-btn');
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('games-container');
+            
+            btn.disabled = true;
+            loading.classList.add('active');
+            container.style.opacity = '0.5';
+            
+            try {
+                const response = await fetch(`?format=json&date=${currentDate}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                if (!response.ok) throw new Error('Failed to fetch data');
+                
+                const data = await response.json();
+                
+                if (data.success && data.games && data.games.length > 0) {
+                    renderGames(data);
+                } else {
+                    renderNoGames(data.message || 'No games found');
+                }
+                
+                updateTimestamp();
+            } catch (error) {
+                console.error('Error refreshing scores:', error);
+                alert('Failed to refresh scores. Please try again.');
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('active');
+                container.style.opacity = '1';
+            }
+        }
+
+        function renderGames(data) {
+            // Date is already updated in loadGamesForDate, but update here too for refresh button
+            const dateElement = document.getElementById('game-date');
+            if (dateElement && data.display_date) {
+                dateElement.textContent = data.display_date;
+                dateElement.setAttribute('data-current-date', data.date);
+            }
+            
+            const gamesHTML = data.games.map(game => {
+                const awayWinner = game.away_team.score > game.home_team.score;
+                const homeWinner = game.home_team.score > game.away_team.score;
+                
+                let scoringHTML = '';
+                if (game.scoring_summary && game.scoring_summary.length > 0) {
+                    scoringHTML = '<div class="scoring-summary" style="display: ' + (detailsVisible ? 'block' : 'none') + ';">';
+                    
+                    scoringHTML += '<div class="scoring-title">⚡ Scoring Summary</div>';
+                    
+                    game.scoring_summary.forEach(periodGroup => {
+                        scoringHTML += '<div class="scoring-period">';
+                        scoringHTML += '<div class="period-header">' + periodGroup.period + '</div>';
+                        
+                        periodGroup.goals.forEach(goal => {
+                            scoringHTML += '<div class="goal">';
+                            scoringHTML += '<div class="goal-time">' + (goal.time || '') + '</div>';
+                            scoringHTML += '<div class="goal-team">' + (goal.team || '') + '</div>';
+                            scoringHTML += '<div class="goal-details">';
+                            
+                            // Handle scorer - check if it's an object or string
+                            const scorerDisplay = goal.scorer && goal.scorer.display ? goal.scorer.display : (goal.scorer || 'Unknown');
+                            scoringHTML += '<div class="scorer">' + scorerDisplay;
+                            
+                            // Add team leader indicators
+                            if (goal.scorer && goal.scorer.is_goals_leader) {
+                                scoringHTML += '<span title="Team Leader in Goals">🏒</span>';
+                            }
+                            if (goal.scorer && goal.scorer.is_assists_leader) {
+                                scoringHTML += '<span title="Team Leader in Assists">🅰️</span>';
+                            }
+                            if (goal.scorer && goal.scorer.is_points_leader) {
+                                scoringHTML += '<span title="Team Leader in Points">★</span>';
+                            }
+                            
+                            scoringHTML += '</div>';
+                            
+                            if (goal.assists && goal.assists.length > 0) {
+                                const assistsText = goal.assists.map(a => {
+                                    let text = a.display || a.name || a;
+                                    if (a.is_goals_leader) text += '<span title="Team Leader in Goals">🏒</span>';
+                                    if (a.is_assists_leader) text += '<span title="Team Leader in Assists">🅰️</span>';
+                                    if (a.is_points_leader) text += '<span title="Team Leader in Points">★</span>';
+                                    return text;
+                                }).join(', ');
+                                scoringHTML += '<div class="assists">Assists: ' + assistsText + '</div>';
+                            }
+                            
+                            scoringHTML += '</div></div>';
+                        });
+                        
+                        scoringHTML += '</div>';
+                    });
+                    
+                    scoringHTML += '</div>';
+                }
+                
+                return `
+                    <div class="game-card">
+                        <div class="game-header">
+                            <div class="status-badge status-${game.status.toLowerCase()}">
+                                ${game.status}
+                            </div>
+                            <div>
+                                ${game.period_info || game.start_time || ''}
+                            </div>
+                        </div>
+                        <div class="game-body">
+                            <div class="matchup">
+                                <div class="team team-away">
+                                    ${game.away_team.logo ? '<img src="' + game.away_team.logo + '" alt="' + game.away_team.abbrev + '" class="team-logo">' : ''}
+                                    <div class="team-name">${game.away_team.abbrev}</div>
+                                    ${game.scoring_summary && game.scoring_summary.length > 0 ? `
+                                    <div class="team-detail ${detailsVisible ? 'visible' : ''}" data-game-id="${game.id}">
+                                        ${game.away_team.shots ? '<div>Shots: ' + game.away_team.shots + '</div>' : ''}
+                                        ${game.away_team.record ? '<div>' + game.away_team.record + '</div>' : ''}
+                                    </div>
+                                    ` : ''}
+                                </div>
+                                <div class="score-container">
+                                    ${game.status !== 'Scheduled' ? `
+                                        <div>
+                                            <span class="score ${awayWinner ? 'winner-score' : ''}">${game.away_team.score}</span>
+                                            <span class="score-separator">-</span>
+                                            <span class="score ${homeWinner ? 'winner-score' : ''}">${game.home_team.score}</span>
+                                        </div>
+                                    ` : '<div class="vs">VS</div>'}
+                                </div>
+                                <div class="team team-home">
+                                    ${game.home_team.logo ? '<img src="' + game.home_team.logo + '" alt="' + game.home_team.abbrev + '" class="team-logo">' : ''}
+                                    <div class="team-name">${game.home_team.abbrev}</div>
+                                    ${game.scoring_summary && game.scoring_summary.length > 0 ? `
+                                    <div class="team-detail ${detailsVisible ? 'visible' : ''}" data-game-id="${game.id}">
+                                        ${game.home_team.shots ? '<div>Shots: ' + game.home_team.shots + '</div>' : ''}
+                                        ${game.home_team.record ? '<div>' + game.home_team.record + '</div>' : ''}
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            ${scoringHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            const gamesContainer = document.getElementById('games-container');
+            if (gamesContainer) {
+                gamesContainer.innerHTML = `
+                    <div class="games-grid">${gamesHTML}</div>
+                `;
+            }
+            
+            // Also render leaderboard if available
+            if (data.leaders) {
+                renderLeaderboard(data.leaders);
+            }
+        }
+
+        function renderLeaderboard(leaders) {
+            const categories = ['goals', 'assists', 'points'];
+            const icons = { goals: '🏒', assists: '🅰️', points: '★' };
+            const gradients = {
+                goals: 'background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);',
+                assists: 'background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);',
+                points: 'background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #2d3748;'
+            };
+            
+            let leaderboardHTML = `
+                <div class="leaderboard-section" id="leaderboard-section" style="display: ${leaderboardVisible ? 'block' : 'none'};">
+                    <h2 class="leaderboard-title">🏆 League Leaders</h2>
+                    <div class="leaderboard-grid">`;
+            
+            categories.forEach(category => {
+                const categoryData = leaders[category] || [];
+                leaderboardHTML += `
+                    <div class="leader-card">
+                        <div class="leader-header ${category}" style="${gradients[category]}">${icons[category]} ${category.charAt(0).toUpperCase() + category.slice(1)}</div>
+                        <div class="leader-list">`;
+                
+                categoryData.forEach((player, index) => {
+                    const isTop3 = index < 3;
+                    const isHidden = index >= 10;
+                    leaderboardHTML += `
+                        <div class="leader-item ${isHidden ? 'hidden' : ''}" data-category="${category}">
+                            <div class="leader-rank ${isTop3 ? 'top3' : ''}">${index + 1}</div>
+                            <div class="leader-info">
+                                <div class="leader-name">${player.name}</div>
+                                <div class="leader-team">${player.team}</div>
+                            </div>
+                            <div class="leader-value">${player.value}</div>
+                        </div>`;
+                });
+                
+                leaderboardHTML += '</div>';
+                
+                if (categoryData.length > 10) {
+                    leaderboardHTML += `
+                        <button class="expand-btn" onclick="toggleLeaders('${category}')">
+                            <span id="${category}-btn-text">▼ Show Top 25</span>
+                        </button>`;
+                }
+                
+                leaderboardHTML += '</div>';
+            });
+            
+            leaderboardHTML += '</div></div>';
+            
+            // Check if leaderboard section exists
+            const existingSection = document.getElementById('leaderboard-section');
+            if (existingSection) {
+                // Replace just the leaderboard section, not its parent
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = leaderboardHTML;
+                const newSection = tempDiv.firstElementChild;
+                existingSection.parentNode.replaceChild(newSection, existingSection);
+            } else {
+                // Insert before games container if it doesn't exist
+                const gamesContainer = document.getElementById('games-container');
+                if (gamesContainer) {
+                    gamesContainer.insertAdjacentHTML('beforebegin', leaderboardHTML);
+                }
+            }
+        }
+
+        function renderNoGames(message) {
+            const gamesContainer = document.getElementById('games-container');
+            if (gamesContainer) {
+                gamesContainer.innerHTML = `
+                    <div class="no-games">
+                        <div class="no-games-icon">🏒</div>
+                        <h2>No Games Today</h2>
+                        <p>${message || 'Check back later for upcoming games!'}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Update timestamp on load
+        updateTimestamp();
+
+        // Optional: Auto-refresh every 2 minutes for live games
+        // Uncomment the following line to enable auto-refresh
+        // setInterval(refreshScores, 120000);
+    </script>
 </body>
 </html>

@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-9v21mx*4-4d)0&tb(yiddohr+bv^%+4)tm#jbsugpe%31!##5a
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['nayab9.pythonanywhere.com']
+ALLOWED_HOSTS = ['nayab9.pythonanywhere.com', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "scores_app.middleware.DebugLoggingMiddleware",  # Add this at the top to catch all requests
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -117,6 +118,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+# Tell Django where to find static files during development
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
