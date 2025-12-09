@@ -2739,8 +2739,43 @@ def get_games_data(date_str=None):
                 if period not in period_groups:
                     period_groups[period] = []
                 period_groups[period].append(goal)
-            # Convert to list of periods with goals
+            
+            # Add all periods, even those with no goals
+            # Determine the number of periods based on game status
+            total_periods = 3  # Default for regulation
+            if game_data:
+                current_period = game_data.get('period', game_data.get('currentPeriod', 0))
+                if current_period and current_period > 3:
+                    total_periods = current_period  # Include OT periods
+            
+            # Ensure all periods are represented (at least regulation periods)
+            for p in range(1, total_periods + 1):
+                if p <= 3:
+                    period_name = f"Period {p}"
+                elif p == 4:
+                    period_name = "OT"
+                else:
+                    period_name = f"OT{p - 3}"
+                
+                if period_name not in period_groups:
+                    period_groups[period_name] = []
+            
+            # Convert to list of periods with goals (sorted by period number)
+            def period_sort_key(item):
+                period = item['period']
+                if period.startswith('Period'):
+                    return int(period.split()[1])
+                elif period == 'OT':
+                    return 4
+                elif period.startswith('OT'):
+                    return 3 + int(period[2:])
+                elif period == 'SO':
+                    return 100
+                else:
+                    return 999
+            
             scoring_summary = [{'period': period, 'goals': goals} for period, goals in period_groups.items()]
+            scoring_summary.sort(key=period_sort_key)
         
         # Extract broadcast information from schedule data (more reliable than where-to-watch API)
         where_to_watch = []
